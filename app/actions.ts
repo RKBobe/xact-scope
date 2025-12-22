@@ -1,76 +1,66 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
-import { model } from '@/lib/gemini' 
-import { auth } from '@clerk/nextjs/server'
-import { revalidatePath } from 'next/cache'
+import { auth } from "@clerk/nextjs/server";
+import { prisma } from "@/lib/prisma";
+import { model } from "@/lib/gemini";
+import { revalidatePath } from "next/cache";
+// 1. IMPORT THE ENUM
+import { ScopeStatus } from "@prisma/client";
 
 export async function generateScope(formData: FormData) {
-  const { userId } = await auth()
-  
+  const { userId } = await auth();
+
   if (!userId) {
-    throw new Error('Unauthorized')
+    throw new Error("Unauthorized");
   }
 
-  const rawInput = formData.get('rawInput') as string
-  
-  if (!rawInput) {
-    throw new Error('Input is required')
-  }
+  const rawInput = formData.get("rawInput") as string;
 
-  // 1. Find or create User
-  let userProfile = await prisma.userProfile.findUnique({
-    where: { clerkId: userId },
-  })
-
-  if (!userProfile) {
-    userProfile = await prisma.userProfile.create({
-      data: { clerkId: userId, email: "user@example.com" }, 
-    })
-  }
-
-  // 2. Create Scope
+  // 2. Use ScopeStatus.PENDING instead of just "PENDING"
   const scope = await prisma.scope.create({
     data: {
       userClerkId: userId,
-      rawInput,
-      status: 'PROCESSING',
+      rawInput: rawInput,
+      status: ScopeStatus.PROCESSING,
     },
-  })
+  });
 
   try {
     const prompt = `
-      You are an expert insurance adjuster and Xactimate estimator.
-      Analyze the following damage description and generate a list of Xactimate line items.
+      You are an expert insurance adjuster and Xactimate estimator. 
+      Analyze the damage description and generate a comprehensive list of Xactimate line items.
+      
+      You handle ALL trades including: Roofing, Drywall, Painting, Flooring, Siding, Mitigation, Framing, Electrical, and Plumbing.
       
       Input Description: "${rawInput}"
       
-      Output strictly in this JSON format (array of objects):
+      Rules:
+      1. Use standard Xactimate codes (e.g., RFG 300, DRY 1/2, PNT P, FCC AV).
+      2. Always include waste in your calculations where appropriate (e.g., 10-15% for flooring/roofing).
+      3. If dimensions are given (e.g. "12x12 room"), calculate the square footage for the quantity.
+      4. Output strictly valid JSON.
+      
+      Output Format (Array of Objects):
       [
         {
-          "category": "Roofing", 
-          "xactCode": "RFG 300", 
-          "description": "Remove and replace 3 tab shingle", 
-          "quantity": 15, 
-          "unit": "SQ"
+          "category": "Drywall", 
+          "xactCode": "DRY 1/2", 
+          "description": "Hang and tape 1/2\" drywall", 
+          "quantity": 320, 
+          "unit": "SF"
         }
       ]
       
       Do not include markdown formatting like \`\`\`json. Just the raw JSON array.
-    `
+    `;
 
-    const result = await model.generateContent(prompt)
-    const responseText = result.response.text()
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
 
-    // Debugging logs
-    console.log("👇👇👇 GEMINI RAW RESPONSE 👇👇👇")
-    console.log(responseText)
-    console.log("👆👆👆 END RESPONSE 👆👆👆")
+    const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    const lineItems = JSON.parse(cleanText);
 
-    const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim()
-    const lineItems = JSON.parse(cleanJson)
-
-    // 3. Save Line Items
     for (const item of lineItems) {
       await prisma.lineItem.create({
         data: {
@@ -78,29 +68,47 @@ export async function generateScope(formData: FormData) {
           category: item.category,
           xactCode: item.xactCode,
           description: item.description,
-          quantity: Number(item.quantity),
+          quantity: item.quantity,
           unit: item.unit,
         },
-      })
+      });
     }
 
+    // 3. Use ScopeStatus.COMPLETED
     await prisma.scope.update({
       where: { id: scope.id },
-      data: { status: 'COMPLETED' },
-    })
-
-    // Refresh the page
-    revalidatePath('/')
-    
-    // REMOVED: return { success: true ... } 
-    // We return nothing (void) to make the HTML Form happy.
+      data: { status: ScopeStatus.COMPLETED },
+    });
 
   } catch (error) {
-    console.error("AI Error:", error)
+    console.error("AI Error:", error);
+    // 4. Use ScopeStatus.FAILED
     await prisma.scope.update({
       where: { id: scope.id },
-      data: { status: 'FAILED' },
-    })
-    // REMOVED: return { success: false ... }
+      data: { status: ScopeStatus.FAILED },
+    });
   }
+
+  revalidatePath("/");
+}
+
+export async function deleteScope(formData: FormData) {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const scopeId = formData.get("scopeId") as string;
+
+  await prisma.$transaction([
+    prisma.lineItem.deleteMany({
+      where: { scopeId: scopeId }
+    }),
+    prisma.scope.delete({
+      where: { 
+        id: scopeId,
+        userClerkId: userId 
+      }
+    })
+  ]);
+
+  revalidatePath("/");
 }
