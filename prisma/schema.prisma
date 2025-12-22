@@ -1,0 +1,66 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Uses the connection pooler (Port 6543) - Best for serverless/Next.js
+  url       = env("POSTGRES_PRISMA_URL")
+  // Uses the direct connection (Port 5432) - Required for migrations
+  directUrl = env("POSTGRES_URL_NON_POOLING")
+}
+
+// --- Your Application Models ---
+
+model UserProfile {
+  id        String   @id @default(uuid())
+  clerkId   String   @unique // We link this to the Clerk User ID
+  email     String?
+  credits   Int      @default(5) // To track usage/tokens later
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  scopes    Scope[]
+}
+
+model Scope {
+  id          String     @id @default(uuid())
+  userClerkId String
+  user        UserProfile @relation(fields: [userClerkId], references: [clerkId])
+  
+  claimNumber String?
+  address     String?
+  
+  // The raw text or transcript you want Gemini to process
+  rawInput    String     @db.Text 
+  
+  // AI Processing status
+  status      ScopeStatus @default(DRAFT)
+  
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  
+  lineItems   LineItem[]
+}
+
+model LineItem {
+  id          String   @id @default(uuid())
+  scopeId     String
+  scope       Scope    @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+  
+  category    String?  // e.g. "Roofing", "Drywall"
+  xactCode    String?  // The Xactimate code (e.g. "RFG 300")
+  description String   // Description of the item
+  quantity    Float    
+  unit        String?  // e.g. "SQ", "LF", "EA"
+  
+  createdAt   DateTime @default(now())
+}
+
+enum ScopeStatus {
+  DRAFT
+  PROCESSING
+  COMPLETED
+  FAILED
+}

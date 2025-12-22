@@ -1,116 +1,108 @@
+import { prisma } from '@/lib/prisma'
+// We use the @ alias to be safe, assuming actions.ts is in app/
+import { generateScope } from '@/app/actions'
+import { auth } from '@clerk/nextjs/server'
+import { redirect } from 'next/navigation'
 
-"use client";
-import { useState } from "react";
+export default async function Home() {
+  const { userId } = await auth()
 
-// Define what a "Scope Item" looks like so TypeScript is happy
-interface ScopeItem {
-  CAT: string;
-  SEL: string;
-  ACT: string;
-  QTY: number;
-  UNIT: string;
-  DESC: string;
-}
-
-export default function Home() {
-  const [input, setInput] = useState("");
-  const [items, setItems] = useState<ScopeItem[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  async function processScope() {
-    if (!input) return;
-    setLoading(true);
-    
-    try {
-      const res = await fetch("/api/parse-scope", {
-        method: "POST",
-        body: JSON.stringify({ text: input }),
-      });
-      const data = await res.json();
-      setItems(data.items || []);
-    } catch {
-      alert("Error processing scope");
-    } finally {
-      setLoading(false);
-    }
+  if (!userId) {
+    redirect('/sign-in')
   }
 
-  function copyToClipboard() {
-    // 1. Create the header row
-    const headers = "CAT\tSEL\tQTY\tDESC\tUNIT\tACT";
-    
-    // 2. Format each item row with Tab (\t) separators
-    const rows = items.map(i => 
-      `${i.CAT}\t${i.SEL}\t${i.QTY}\t${i.DESC}\t${i.UNIT}\t${i.ACT}`
-    ).join("\n");
-    
-    // 3. Combine them
-    const tsv = `${headers}\n${rows}`;
-    
-    // 4. Copy to clipboard using the modern API
-    navigator.clipboard.writeText(tsv).then(() => {
-      alert("✅ Copied! \n\nGo to Xactimate -> Click the first empty cell -> Press Ctrl+V");
-    }).catch(err => {
-      console.error('Failed to copy:', err);
-      alert("❌ Failed to copy. Please manually select the table.");
-    });
-  }
+  const scopes = await prisma.scope.findMany({
+    where: { userClerkId: userId },
+    include: { lineItems: true },
+    orderBy: { createdAt: 'desc' },
+  })
 
   return (
-    <main className="min-h-screen p-8 max-w-2xl mx-auto bg-gray-50 font-sans">
-      <h1 className="text-3xl font-bold mb-6 text-blue-900">Roof Runner 🏃‍♂️</h1>
-      
-      <textarea
-        className="w-full p-4 border rounded-lg h-32 mb-4 text-gray-900"
-        placeholder="Type here (e.g., '30 square lam roof, 4 turtles...')"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-      />
-      
-      <button 
-        onClick={processScope}
-        disabled={loading}
-        className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition mb-8"
-      >
-        {loading ? "Processing..." : "Generate Xactimate Codes"}
-      </button>
-
-      {items.length > 0 && (
-        <div className="bg-white shadow rounded p-4">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-800">Results</h2>
-            <button 
-              onClick={copyToClipboard}
-              className="bg-green-600 text-white px-4 py-2 rounded font-bold hover:bg-green-700"
-            >
-              Copy Table
-            </button>
-          </div>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left border">
-              <thead className="bg-gray-100 text-gray-700 uppercase">
-                <tr>
-                  <th className="px-4 py-2">CAT</th>
-                  <th className="px-4 py-2">SEL</th>
-                  <th className="px-4 py-2">QTY</th>
-                  <th className="px-4 py-2">DESC</th>
-                </tr>
-              </thead>
-              <tbody className="text-gray-600">
-                {items.map((item, idx) => (
-                  <tr key={idx} className="border-b hover:bg-gray-50">
-                    <td className="px-4 py-2 font-mono">{item.CAT}</td>
-                    <td className="px-4 py-2 font-mono">{item.SEL}</td>
-                    <td className="px-4 py-2 font-bold">{item.QTY}</td>
-                    <td className="px-4 py-2">{item.DESC}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+    <main className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-4xl mx-auto space-y-8">
+        
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-gray-900">Scope-to-Xactimate</h1>
         </div>
-      )}
+
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+          <h2 className="text-xl font-semibold mb-4">New Assessment</h2>
+          <form action={generateScope} className="space-y-4">
+            <div>
+              <label htmlFor="rawInput" className="block text-sm font-medium text-gray-700 mb-1">
+                Field Notes / Damage Description
+              </label>
+              <textarea
+                name="rawInput"
+                id="rawInput"
+                rows={4}
+                className="w-full rounded-md border border-gray-300 p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                placeholder="e.g. Master bedroom 12x14. Water damage to ceiling. Remove and replace 1/2 inch drywall..."
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium"
+            >
+              Generate Estimate
+            </button>
+          </form>
+        </div>
+
+        <div className="space-y-6">
+          <h2 className="text-xl font-semibold text-gray-900">Recent Scopes</h2>
+          
+          {scopes.length === 0 ? (
+            <p className="text-gray-500 italic">No scopes generated yet.</p>
+          ) : (
+            scopes.map((scope) => (
+              <div key={scope.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                  <div>
+                    <p className="text-sm text-gray-500">{new Date(scope.createdAt).toLocaleDateString()}</p>
+                    {/* FIXED: Replaced " with &quot; */}
+                    <p className="font-medium text-gray-900 truncate max-w-md">&quot;{scope.rawInput.substring(0, 50)}...&quot;</p>
+                  </div>
+                  <span className={`px-2 py-1 text-xs font-semibold rounded-full 
+                    ${scope.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 
+                      scope.status === 'FAILED' ? 'bg-red-100 text-red-800' : 
+                      'bg-yellow-100 text-yellow-800'}`}>
+                    {scope.status}
+                  </span>
+                </div>
+
+                {scope.lineItems.length > 0 && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-gray-50 text-gray-600 font-medium border-b">
+                        <tr>
+                          <th className="px-6 py-3">Category</th>
+                          <th className="px-6 py-3">Code</th>
+                          <th className="px-6 py-3">Description</th>
+                          <th className="px-6 py-3 text-right">Qty</th>
+                          <th className="px-6 py-3">Unit</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {scope.lineItems.map((item) => (
+                          <tr key={item.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-3 text-gray-500">{item.category}</td>
+                            <td className="px-6 py-3 font-mono text-blue-600">{item.xactCode}</td>
+                            <td className="px-6 py-3 text-gray-900">{item.description}</td>
+                            <td className="px-6 py-3 text-right font-medium">{item.quantity}</td>
+                            <td className="px-6 py-3 text-gray-500">{item.unit}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </main>
-  );
+  )
 }
