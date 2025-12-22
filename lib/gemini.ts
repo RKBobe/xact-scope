@@ -8,5 +8,5 @@ if (!apiKey) {
 
 const genAI = new GoogleGenerativeAI(apiKey);
 
-// UPDATED: Changed 'gemini-pro' to 'gemini-1.5-flash'
-export const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+// UPDATED: Using a model explicitly listed in your account
+export const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });

@@ -36,10 +36,12 @@ export default async function Home() {
                 name="rawInput"
                 id="rawInput"
                 rows={4}
-                className="w-full rounded-md border border-gray-300 p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                placeholder="e.g. Master bedroom 12x14. Water damage to ceiling. Remove and replace 1/2 inch drywall..."
+                // UPDATED: Added 'text-gray-900' so the text is black
+                className="w-full rounded-md border border-gray-300 p-3 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                placeholder="e.g. Master bedroom 12x14. Water damage to ceiling..."
                 required
-              />
+              />  
+
             </div>
             <button
               type="submit"
