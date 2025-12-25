@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useFormStatus } from 'react-dom'
-import { generateScope } from '@/app/actions'
+import { generateScope } from '@/app/actions/user-actions'
 
 // 1. Define types to satisfy TypeScript Strict Mode
 interface SpeechEvent {

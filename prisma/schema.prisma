@@ -64,3 +64,13 @@ enum ScopeStatus {
   COMPLETED
   FAILED
 }
+
+// schema.prisma
+
+model DemoHit {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  ipHash      String?  // Optional: to see unique visitors
+  inputLength Int      // To track how heavy the request was
+  userAgent   String?  // To see if they are on mobile vs desktop
+}

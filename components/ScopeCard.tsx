@@ -1,101 +1,100 @@
 'use client'
 
-import CopyButton from "./CopyButton"
-import { deleteScope } from "@/app/actions"
+import { useState } from "react"
+import { deleteScope } from "@/app/actions/user-actions" 
+import Link from "next/link"
 
-// FIXED: Updated types to allow "null" coming from the database
+// --- FIX: Allow nulls to match your Database Schema ---
+interface LineItem {
+  id: string
+  category: string | null  // Changed from string to string | null
+  xactCode: string | null  // Changed from string to string | null
+  description: string
+  quantity: number
+  unit: string | null      // Changed from string to string | null
+}
+
 interface ScopeCardProps {
   scope: {
     id: string
+    address: string | null
+    description?: string 
     createdAt: Date
-    rawInput: string
-    status: string
-    lineItems: {
-      id: string
-      category: string | null  // <--- Allow null
-      xactCode: string | null  // <--- Allow null
-      description: string
-      quantity: number
-      unit: string | null      // <--- Allow null
-    }[]
+    lineItems: LineItem[]
   }
 }
 
 export default function ScopeCard({ scope }: ScopeCardProps) {
-  return (
-    <div className="bg-white dark:bg-gray-800 dark:border-gray-700 overflow-hidden">
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  // Calculate totals for a quick preview
+  const itemCount = scope.lineItems ? scope.lineItems.length : 0;
+  
+  const previewText = scope.lineItems 
+    ? scope.lineItems.slice(0, 3).map(i => i.description).join(", ") + (itemCount > 3 ? "..." : "")
+    : "No items generated.";
+
+  const handleDelete = async () => {
+    if (!confirm("Are you sure you want to delete this scope?")) return
+    setIsDeleting(true)
+    
+    try {
+      const formData = new FormData()
+      formData.append("id", scope.id)
       
-      {/* SCOPE CARD HEADER */}
-      <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+      await deleteScope(formData)
+    } catch (error) {
+      console.error("Delete failed:", error)
+      alert("Failed to delete")
+      setIsDeleting(false)
+    }
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg shadow-sm hover:shadow-md transition-shadow p-5 relative group">
+      
+      {/* Top Row: Address & Date */}
+      <div className="flex justify-between items-start mb-2">
         <div>
-          <p className="text-sm text-gray-500">{new Date(scope.createdAt).toLocaleDateString()}</p>
-          <p className="font-medium text-gray-900 truncate max-w-md">&quot;{scope.rawInput.substring(0, 50)}...&quot;</p>
+           <h3 className="font-bold text-lg text-slate-900">
+             {scope.address || "Untitled Scope"}
+           </h3>
+           <p className="text-xs text-slate-400">
+             {new Date(scope.createdAt).toLocaleDateString()} at {new Date(scope.createdAt).toLocaleTimeString()}
+           </p>
         </div>
-        
-        <div className="flex items-center gap-3">
-          {/* Status Badge */}
-          <span className={`px-2 py-1 text-xs font-semibold rounded-full 
-            ${scope.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 
-              scope.status === 'FAILED' ? 'bg-red-100 text-red-800' : 
-              'bg-yellow-100 text-yellow-800'}`}>
-            {scope.status}
-          </span>
-
-          {/* Copy Button */}
-          {/* We filter out items that might have null codes before passing to CopyButton */}
-          {scope.status === 'COMPLETED' && scope.lineItems.length > 0 && (
-            <CopyButton items={scope.lineItems.map(item => ({
-              ...item,
-              category: item.category || "",
-              xactCode: item.xactCode || "",
-              unit: item.unit || ""
-            }))} />
-          )}
-
-          {/* DELETE BUTTON */}
-          <form action={deleteScope}>
-            <input type="hidden" name="scopeId" value={scope.id} />
-            <button 
-              type="submit"
-              className="text-gray-400 hover:text-red-600 transition-colors p-1"
-              title="Delete Scope"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-              </svg>
-            </button>
-          </form>
-        </div>
+        <span className="bg-cyan-50 text-cyan-700 text-xs font-bold px-2 py-1 rounded-full border border-cyan-100">
+          {itemCount} Items
+        </span>
       </div>
 
-      {/* ESTIMATE TABLE */}
-      {scope.lineItems.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse">
-            <thead className="bg-gray-100 text-gray-600 font-medium border-b border-gray-200">
-              <tr>
-                <th className="px-4 py-3 w-1/6">Category</th>
-                <th className="px-4 py-3 w-1/6">Code</th>
-                <th className="px-4 py-3 w-1/3">Description</th>
-                <th className="px-4 py-3 text-right w-1/6">Qty</th>
-                <th className="px-4 py-3 w-1/6">Unit</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {scope.lineItems.map((item) => (
-                <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                  {/* We use || '-' to safely display empty fields */}
-                  <td className="px-4 py-3 text-gray-700">{item.category || '-'}</td>
-                  <td className="px-4 py-3 font-mono text-blue-600 font-semibold">{item.xactCode || '?'}</td>
-                  <td className="px-4 py-3 text-gray-900">{item.description}</td>
-                  <td className="px-4 py-3 text-right font-medium">{item.quantity}</td>
-                  <td className="px-4 py-3 text-gray-500">{item.unit || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {/* Middle Row: Preview */}
+      <div className="mb-4">
+        <p className="text-sm text-slate-600 line-clamp-2">
+           <span className="font-semibold text-slate-400 text-xs uppercase tracking-wider mr-2">Preview:</span>
+           {previewText}
+        </p>
+      </div>
+
+      {/* Bottom Row: Actions */}
+      <div className="flex items-center gap-3 pt-3 border-t border-slate-100">
+        <Link 
+          href={`/dashboard/${scope.id}`} 
+          className="text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:underline"
+        >
+          View Details
+        </Link>
+
+        <div className="flex-grow"></div>
+
+        <button
+          onClick={handleDelete}
+          disabled={isDeleting}
+          className="text-sm text-slate-400 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+        >
+          {isDeleting ? "Deleting..." : "Delete"}
+        </button>
+      </div>
     </div>
   )
 }
