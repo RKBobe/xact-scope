@@ -8,7 +8,7 @@ export async function POST(request: Request) {
     console.log("🔹 Input received:", text);
 
     // 2. Check if the API Key is loaded
-    const apiKey ="AIzaSyDyKhmQX9lfOqtAVlijbytdY2pPwATYbRY";
+    const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       console.error("❌ ERROR: Gemini API Key is missing from .env.local");
