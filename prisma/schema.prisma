@@ -74,3 +74,9 @@ model DemoHit {
   inputLength Int      // To track how heavy the request was
   userAgent   String?  // To see if they are on mobile vs desktop
 }
+
+model UserUsage {
+  userId      String   @id
+  count       Int      @default(0)
+  lastUpdated DateTime @default(now()) @updatedAt
+}

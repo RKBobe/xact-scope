@@ -50,13 +50,24 @@ export async function generateDemoScope(formData: FormData) {
     const response = await result.response;
     const text = response.text();
     
-    // Clean the AI response
-    const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    const lineItems = JSON.parse(cleanText);
+    // Improved JSON Extraction: Find the first [ and last ]
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      console.error("No JSON found in AI response:", text);
+      throw new Error("AI failed to return valid line items");
+    }
+
+    const lineItems = JSON.parse(jsonMatch[0]);
+
+    // Ensure quantities are numbers for the frontend
+    const cleanedItems = lineItems.map((item: any) => ({
+      ...item,
+      quantity: typeof item.quantity === 'string' ? parseFloat(item.quantity) || 0 : item.quantity || 0,
+    }));
 
     // 4. RETURN DATA DIRECTLY
     // (We do NOT save line items to the DB, because this is just a demo view)
-    return { success: true, data: lineItems };
+    return { success: true, data: cleanedItems };
 
   } catch (error) {
     console.error("Demo AI Error:", error);

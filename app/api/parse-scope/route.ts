@@ -1,26 +1,16 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { model } from "@/lib/gemini";
 import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
   try {
     // 1. Check if the server received the text
     const { text } = await request.json();
+    if (!text) {
+      return NextResponse.json({ error: "No input text provided" }, { status: 400 });
+    }
     console.log("🔹 Input received:", text);
 
-    // 2. Check if the API Key is loaded
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (!apiKey) {
-      console.error("❌ ERROR: Gemini API Key is missing from .env.local");
-      throw new Error("Missing API Key");
-    }
-    console.log("🔹 API Key status: Loaded");
-
-    // 3. Initialize Gemini
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
-
-    // 4. Send to Google
+    // 2. Send to Gemini
     console.log("🔹 Sending to Gemini...");
     const SYSTEM_PROMPT = `
     You are an expert Xactimate Estimator. Your ONLY job is to convert field notes into valid Xactimate Line Items.
@@ -54,16 +44,21 @@ export async function POST(request: Request) {
     const rawText = response.text();
     console.log("🔹 Raw AI Response:", rawText);
 
-    // 5. Clean & Parse
-    const cleanText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
-    const data = JSON.parse(cleanText);
+    // 3. Clean & Parse: Improved JSON extraction (finds first { and last })
+    const start = rawText.indexOf('{');
+    const end = rawText.lastIndexOf('}');
+    
+    if (start === -1 || end === -1 || end < start) {
+      throw new Error("No valid JSON object found in AI response");
+    }
+    
+    const jsonString = rawText.substring(start, end + 1);
+    const data = JSON.parse(jsonString);
 
     return NextResponse.json(data);
 
   } catch (error: unknown) {
-    // FIX: Check if error is real before using it
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    
     console.error("🔥 CRITICAL SERVER ERROR:", errorMessage);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }

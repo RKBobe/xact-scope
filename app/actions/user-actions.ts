@@ -58,21 +58,28 @@ export async function generateScope(formData: FormData) {
     const response = await result.response;
     const text = response.text();
 
-    const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    const lineItems = JSON.parse(cleanText);
-
-    for (const item of lineItems) {
-      await prisma.lineItem.create({
-        data: {
-          scopeId: scope.id,
-          category: item.category,
-          xactCode: item.xactCode,
-          description: item.description,
-          quantity: item.quantity,
-          unit: item.unit,
-        },
-      });
+    // Improved JSON Extraction: Find the first [ and last ]
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      console.error("No JSON found in AI response:", text);
+      throw new Error("AI failed to return valid line items");
     }
+    
+    const lineItems = JSON.parse(jsonMatch[0]);
+
+    // Use createMany for efficiency and ensure quantities are numbers
+    const lineItemsToCreate = lineItems.map((item: any) => ({
+      scopeId: scope.id,
+      category: item.category || "Unknown",
+      xactCode: item.xactCode || "???",
+      description: item.description || "No description provided",
+      quantity: typeof item.quantity === 'string' ? parseFloat(item.quantity) || 0 : item.quantity || 0,
+      unit: item.unit || "EA",
+    }));
+
+    await prisma.lineItem.createMany({
+      data: lineItemsToCreate,
+    });
 
     // 3. Use ScopeStatus.COMPLETED
     await prisma.scope.update({

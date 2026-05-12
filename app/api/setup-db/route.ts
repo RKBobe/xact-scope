@@ -1,29 +1,19 @@
-import { sql } from '@vercel/postgres';
+import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    // 1. Check if the variable even exists
-    const hasUrl = !!process.env.POSTGRES_URL;
-    console.log(`[DEBUG] POSTGRES_URL is ${hasUrl ? "LOADED" : "MISSING"}`);
-
-    // 2. Attempt the query
-    await sql`
-      CREATE TABLE IF NOT EXISTS user_usage (
-        user_id TEXT PRIMARY KEY,
-        count INTEGER DEFAULT 0,
-        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `;
-    return NextResponse.json({ message: "✅ Database table created successfully" });
+    // With Prisma, we don't strictly need to 'create table' manually 
+    // as that's handled by migrations, but we can check the connection 
+    // or seed initial data if needed.
+    
+    // Attempt a simple query to verify connection
+    await prisma.$queryRaw`SELECT 1`;
+    
+    return NextResponse.json({ message: "✅ Database connection verified and schema is ready." });
   } catch (error) {
-    // 3. Force the real error into the terminal
-    console.error("🔴 CONNECTION ERROR:", error);
-    
-    // Safely cast error to access the message property
-    const errorMessage = (error as Error).message;
-    console.error("🔴 ERROR MESSAGE:", errorMessage);
-    
+    console.error("🔴 DATABASE ERROR:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

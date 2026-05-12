@@ -40,7 +40,7 @@ export default function ScopeCard({ scope }: ScopeCardProps) {
     
     try {
       const formData = new FormData()
-      formData.append("id", scope.id)
+      formData.append("scopeId", scope.id) // Corrected from "id" to "scopeId"
       
       await deleteScope(formData)
     } catch (error) {
